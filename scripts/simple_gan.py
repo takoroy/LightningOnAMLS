@@ -25,6 +25,7 @@ from torchvision.datasets import MNIST
 
 from pytorch_lightning.core import LightningModule
 from pytorch_lightning.trainer import Trainer
+from pytorch_lightning.loggers import TensorBoardLogger
 
 
 class Generator(nn.Module):
@@ -171,13 +172,18 @@ class GAN(LightningModule):
 
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr, betas=(b1, b2))
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr, betas=(b1, b2))
+
         return [opt_g, opt_d], []
+
+    def prepare_data(self):
+        # download
+        MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
 
     def train_dataloader(self):
         transform = transforms.Compose(
             [transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
         )
-        dataset = MNIST(os.getcwd(), train=True, download=True, transform=transform)
+        dataset = MNIST(os.getcwd(), train=True, download=False, transform=transform)
         return DataLoader(dataset, batch_size=self.batch_size)
 
     def on_epoch_end(self):
@@ -200,7 +206,14 @@ def main(args: Namespace) -> None:
     # ------------------------
     # If use distubuted training  PyTorch recommends to use DistributedDataParallel.
     # See: https://pytorch.org/docs/stable/nn.html#torch.nn.DataParallel
-    trainer = Trainer()
+    tb_logger = TensorBoardLogger(save_dir="logs", name="mnist-gan")
+    trainer = Trainer(
+        distributed_backend="horovod",
+        gpus=1,
+        logger=tb_logger,
+        max_epochs=10,
+        prepare_data_per_node=True,
+    )
 
     # ------------------------
     # 3 START TRAINING
